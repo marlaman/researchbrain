@@ -1,0 +1,191 @@
+{
+  "components": [
+    {
+      "id": "chat_2",
+      "provider": "chat",
+      "config": {
+        "hideForm": true,
+        "mode": "Source",
+        "parameters": {},
+        "type": "chat"
+      },
+      "ui": {
+        "position": {
+          "x": -250,
+          "y": 570
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "agent_deepagent_1",
+      "provider": "agent_deepagent",
+      "config": {
+        "default": {
+          "advanced_mode": false,
+          "instructions": [
+            "You are a multi-source research agent. The user gives a topic. Search arXiv, the web (Exa), and scrape key pages (Firecrawl). Return ONLY valid JSON — no markdown fences.",
+            "1) HTTP tool: GET https://export.arxiv.org/api/query?search_query=all:TOPIC&max_results=10&sortBy=submittedDate (URL-encode the topic). Collect titles, abstracts, arxiv.org/abs links.",
+            "2) Exa search: query the topic plus 'TOPIC site:arxiv.org' and 'TOPIC machine learning research'.",
+            "3) Firecrawl: scrape the 3–5 most relevant URLs from arXiv and Exa results.",
+            "Never invent URLs. Every claim must cite a source id. OUTPUT: { topic, summary, sources: [{ id, title, url, type, snippet, date }], entities: [{ id, name, type }], relations: [{ from, to, label }], claims: [{ text, source_ids }], open_questions }"
+          ]
+        }
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "chat_2"
+        }
+      ],
+      "ui": {
+        "position": {
+          "x": 70,
+          "y": 580
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "response_answers_2",
+      "provider": "response_answers",
+      "config": {
+        "laneName": "answers"
+      },
+      "input": [
+        {
+          "lane": "answers",
+          "from": "agent_deepagent_1"
+        }
+      ],
+      "ui": {
+        "position": {
+          "x": 260,
+          "y": 580
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "llm_openai_1",
+      "provider": "llm_openai",
+      "config": {
+        "profile": "openai-4o",
+        "openai-4o": {
+          "apikey": "${ROCKETRIDE_OPENAI_KEY}",
+          "modelSource": ""
+        },
+        "parameters": {}
+      },
+      "control": [
+        {
+          "classType": "llm",
+          "from": "agent_deepagent_1"
+        }
+      ],
+      "ui": {
+        "position": {
+          "x": -150,
+          "y": 930
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "tool_exa_search_1",
+      "provider": "tool_exa_search",
+      "config": {
+        "type": "tool_exa_search",
+        "apikey": "${ROCKETRIDE_EXA_KEY}",
+        "numResults": 10,
+        "useAutoprompt": true,
+        "searchType": "auto",
+        "includeText": true
+      },
+      "control": [
+        {
+          "classType": "tool",
+          "from": "agent_deepagent_1"
+        }
+      ],
+      "ui": {
+        "position": {
+          "x": -20,
+          "y": 1020
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "tool_firecrawl_1",
+      "provider": "tool_firecrawl",
+      "config": {
+        "type": "tool_firecrawl",
+        "apikey": "${ROCKETRIDE_FIRECRAWL_KEY}"
+      },
+      "control": [
+        {
+          "classType": "tool",
+          "from": "agent_deepagent_1"
+        }
+      ],
+      "ui": {
+        "position": {
+          "x": 200,
+          "y": 1020
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "tool_http_request_1",
+      "provider": "tool_http_request",
+      "config": {
+        "type": "tool_http_request",
+        "allowGET": true,
+        "allowPOST": false,
+        "allowPUT": false,
+        "allowPATCH": false,
+        "allowDELETE": false,
+        "allowHEAD": false,
+        "allowOPTIONS": false,
+        "urlWhitelist": [
+          {
+            "whitelistPattern": "^https://export\\.arxiv\\.org/.*"
+          }
+        ],
+        "rateLimitPerSecond": 10,
+        "rateLimitPerMinute": 100,
+        "maxConcurrentRequests": 5
+      },
+      "control": [
+        {
+          "classType": "tool",
+          "from": "agent_deepagent_1"
+        }
+      ],
+      "ui": {
+        "position": {
+          "x": 370,
+          "y": 1020
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    }
+  ],
+  "source": "chat_2",
+  "project_id": "57b82f7b-3f79-45f5-8d2e-d6c56ab30fb8",
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "version": 1
+}

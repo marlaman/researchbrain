@@ -1,0 +1,175 @@
+{
+  "schema": {
+    "tables": {
+      "users": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primaryKey": true,
+            "default": "gen_random_uuid()"
+          },
+          "slack_user_id": {
+            "type": "text",
+            "nullable": true,
+            "unique": true
+          },
+          "discord_user_id": {
+            "type": "text",
+            "nullable": true,
+            "unique": true
+          },
+          "notify_channel": {
+            "type": "text",
+            "nullable": false
+          },
+          "created_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        }
+      },
+      "topics": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primaryKey": true,
+            "default": "gen_random_uuid()"
+          },
+          "user_id": {
+            "type": "uuid",
+            "nullable": false,
+            "references": {
+              "table": "users",
+              "column": "id",
+              "onDelete": "CASCADE"
+            }
+          },
+          "name": {
+            "type": "text",
+            "nullable": false
+          },
+          "xtrace_memory_id": {
+            "type": "text",
+            "nullable": true
+          },
+          "status": {
+            "type": "text",
+            "nullable": false,
+            "default": "'building'"
+          },
+          "is_subscribed": {
+            "type": "boolean",
+            "nullable": false,
+            "default": "true"
+          },
+          "last_checked_at": {
+            "type": "timestamptz",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        },
+        "indexes": {
+          "idx_topics_user_id": { "columns": ["user_id"] },
+          "idx_topics_status": { "columns": ["status"] }
+        }
+      },
+      "jobs": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primaryKey": true,
+            "default": "gen_random_uuid()"
+          },
+          "topic_id": {
+            "type": "uuid",
+            "nullable": false,
+            "references": {
+              "table": "topics",
+              "column": "id",
+              "onDelete": "CASCADE"
+            }
+          },
+          "type": {
+            "type": "text",
+            "nullable": false
+          },
+          "status": {
+            "type": "text",
+            "nullable": false,
+            "default": "'queued'"
+          },
+          "payload": {
+            "type": "jsonb",
+            "nullable": true
+          },
+          "result_summary": {
+            "type": "text",
+            "nullable": true
+          },
+          "triggered_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          },
+          "finished_at": {
+            "type": "timestamptz",
+            "nullable": true
+          }
+        },
+        "indexes": {
+          "idx_jobs_topic_id": { "columns": ["topic_id"] },
+          "idx_jobs_status": { "columns": ["status"] },
+          "idx_jobs_type": { "columns": ["type"] }
+        }
+      },
+      "sources": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "primaryKey": true,
+            "default": "gen_random_uuid()"
+          },
+          "topic_id": {
+            "type": "uuid",
+            "nullable": false,
+            "references": {
+              "table": "topics",
+              "column": "id",
+              "onDelete": "CASCADE"
+            }
+          },
+          "url": {
+            "type": "text",
+            "nullable": false
+          },
+          "title": {
+            "type": "text",
+            "nullable": true
+          },
+          "added_by": {
+            "type": "text",
+            "nullable": false,
+            "default": "'system'"
+          },
+          "was_novel": {
+            "type": "boolean",
+            "nullable": false,
+            "default": "false"
+          },
+          "added_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        },
+        "indexes": {
+          "idx_sources_topic_id": { "columns": ["topic_id"] },
+          "idx_sources_was_novel": { "columns": ["was_novel"] }
+        }
+      }
+    }
+  },
+  "dry_run": false,
+  "name": "research-brain initial schema"
+}

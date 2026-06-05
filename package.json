@@ -1,0 +1,32 @@
+{
+  "name": "research-brain",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.app.json && vite build",
+    "preview": "vite preview",
+    "schema:push": "butterbase schema apply schema.json",
+    "seed": "npx tsx seed.ts",
+    "functions:deploy": "node scripts/deploy-functions.mjs",
+    "deploy": "npm run build && npx butterbase deploy dist --framework react-vite"
+  },
+  "dependencies": {
+    "@butterbase/sdk": "latest",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@butterbase/cli": "^0.4.0",
+    "@types/node": "^22.15.23",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.2",
+    "dotenv": "^17.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.10"
+  }
+}

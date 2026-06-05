@@ -10,7 +10,7 @@ type JobRow = {
   id: string;
   topic_id: string;
   status: string;
-  payload: { topic_name?: string } | null;
+  payload: { topic_name?: string; user_id?: string } | null;
 };
 
 type SourceRow = {
@@ -31,10 +31,24 @@ async function markJobFailed(
   );
 }
 
+function resolveActorUserId(
+  bodyUserId: string | undefined,
+  job: JobRow,
+): string {
+  const actor =
+    bodyUserId?.trim() ||
+    (typeof job.payload?.user_id === "string" ? job.payload.user_id.trim() : "");
+  if (!actor) {
+    throw new Error("user_id is required (logged-in user performing the action)");
+  }
+  return actor;
+}
+
 async function processJob(
   ctx: FunctionContext,
   job: JobRow,
   topicName: string,
+  actorUserId: string,
 ): Promise<{ novel_sources: number; pushed_xtrace: boolean }> {
   await ctx.db.query(`UPDATE jobs SET status = 'running' WHERE id = $1`, [job.id]);
 
@@ -50,7 +64,7 @@ async function processJob(
   let xtraceMemory: string[] = [];
   if (ctx.env.XTRACE_API_KEY && ctx.env.XTRACE_ORG_ID) {
     try {
-      xtraceMemory = await fetchTopicMemoryContext(topicName, ctx.env);
+      xtraceMemory = await fetchTopicMemoryContext(topicName, actorUserId, ctx.env);
     } catch (err) {
       console.warn(
         "xtrace read failed:",
@@ -96,6 +110,7 @@ async function processJob(
       try {
         const memoryId = await ingestCheckToXtrace(
           topicName,
+          actorUserId,
           summary,
           result.new_claims ?? [],
           ctx.env,
@@ -140,6 +155,7 @@ export default async function handler(
     activeJobId = jobId;
     const topicId = (body as { topic_id?: string }).topic_id?.trim();
     const topicName = (body as { topic_name?: string }).topic_name?.trim();
+    const bodyUserId = (body as { user_id?: string }).user_id?.trim();
 
     let job: JobRow | null = null;
 
@@ -180,7 +196,8 @@ export default async function handler(
     const resolvedTopicName =
       topicName ?? job.payload?.topic_name ?? "Untitled topic";
 
-    const outcome = await processJob(ctx, job, resolvedTopicName);
+    const actorUserId = resolveActorUserId(bodyUserId, job);
+    const outcome = await processJob(ctx, job, resolvedTopicName, actorUserId);
 
     return new Response(
       JSON.stringify({

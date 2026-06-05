@@ -137,6 +137,7 @@ export async function runInitialResearchJob(input: {
   job_id: string;
   topic_id?: string;
   topic_name?: string;
+  user_id?: string;
 }): Promise<{ ok: true; sources: number } | { ok: false; error: string }> {
   const job = await fetchJob(input.job_id);
   if (!job || job.type !== "initial_research") {
@@ -233,7 +234,7 @@ export async function runInitialResearchJob(input: {
   // Xtrace runs only after Rocket Ride finishes and sources are saved.
   let xtraceMemoryId: string | undefined;
   try {
-    xtraceMemoryId = await ingestResearchToXtrace(topic, result);
+    xtraceMemoryId = await ingestResearchToXtrace(topic, result, input.user_id);
     if (xtraceMemoryId) {
       console.log("[xtrace] ingested:", xtraceMemoryId);
     }

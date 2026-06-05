@@ -261,8 +261,14 @@ function xtraceHeaders(env: Record<string, string | undefined>): Record<string, 
   };
 }
 
-function xtraceUserId(env: Record<string, string | undefined>): string {
-  return env.XTRACE_USER_ID ?? "1";
+function resolveXtraceUserId(
+  actorUserId: string | undefined,
+  env: Record<string, string | undefined>,
+): string {
+  if (!actorUserId?.trim()) {
+    throw new Error("user_id is required for Xtrace (logged-in user performing the action)");
+  }
+  return actorUserId.trim();
 }
 
 function xtraceConvId(topicName: string): string {
@@ -271,9 +277,10 @@ function xtraceConvId(topicName: string): string {
 
 export async function fetchTopicMemoryContext(
   topicName: string,
+  actorUserId: string,
   env: Record<string, string | undefined>,
 ): Promise<string[]> {
-  const userId = xtraceUserId(env);
+  const userId = resolveXtraceUserId(actorUserId, env);
   const convId = xtraceConvId(topicName);
   const lines: string[] = [];
   let cursor: string | null = null;
@@ -329,8 +336,100 @@ async function pollXtraceJob(
   throw new Error("Xtrace ingest timed out");
 }
 
+function buildXtraceResearchMessages(
+  topicName: string,
+  result: ResearchResult,
+): Array<{ role: "user"; content: string }> {
+  const name = topicName.trim();
+  const messages: Array<{ role: "user"; content: string }> = [
+    { role: "user", content: `I love researching ${name}.` },
+  ];
+
+  const summary = result.summary?.trim();
+  if (summary) {
+    messages.push({
+      role: "user",
+      content: `Regarding ${name}, ${summary}`,
+    });
+  }
+
+  const sources = (result.sources ?? []).filter((s) => s.title?.trim() || s.url);
+  for (const src of sources.slice(0, 5)) {
+    const title = src.title?.trim() || src.url || "source";
+    const url = src.url ? ` (${src.url})` : "";
+    const snippet = src.snippet?.trim();
+    const detail = snippet ? `: ${snippet}` : "";
+    messages.push({
+      role: "user",
+      content: `Regarding ${name}, I found this source — ${title}${url}${detail}`,
+    });
+  }
+
+  const questions = (result.open_questions ?? []).filter((q) => q.trim());
+  for (const question of questions.slice(0, 5)) {
+    messages.push({
+      role: "user",
+      content: `Regarding ${name}, an open question is: ${question.trim()}`,
+    });
+  }
+
+  if (messages.length === 1) {
+    messages.push({
+      role: "user",
+      content: `Regarding ${name}, initial research completed with ${(result.sources ?? []).length} source(s).`,
+    });
+  }
+
+  return messages;
+}
+
+export async function ingestResearchToXtrace(
+  topicName: string,
+  actorUserId: string,
+  result: ResearchResult,
+  env: Record<string, string | undefined>,
+): Promise<string | undefined> {
+  if (!env.XTRACE_API_KEY || !env.XTRACE_ORG_ID) return undefined;
+
+  const messages = buildXtraceResearchMessages(topicName, result);
+  const res = await fetch(`${xtraceBaseUrl(env)}/v1/memories`, {
+    method: "POST",
+    headers: xtraceHeaders(env),
+    body: JSON.stringify({
+      wait: true,
+      user_id: resolveXtraceUserId(actorUserId, env),
+      conv_id: xtraceConvId(topicName),
+      messages,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Xtrace ingest ${res.status}: ${text.slice(0, 300)}`);
+  }
+
+  let job = (await res.json()) as {
+    id?: string;
+    status?: string;
+    result?: { memories_created?: Array<{ id?: string }> };
+    error?: string | null;
+  };
+
+  if (job.status === "pending" || job.status === "running") {
+    if (!job.id) throw new Error("Xtrace returned pending job without id");
+    job = await pollXtraceJob(job.id, env);
+  }
+
+  if (job.status === "failed") {
+    throw new Error(job.error ?? "Xtrace ingest failed");
+  }
+
+  return job.result?.memories_created?.[0]?.id;
+}
+
 export async function ingestCheckToXtrace(
   topicName: string,
+  actorUserId: string,
   updateSummary: string,
   claims: Array<{ text?: string }>,
   env: Record<string, string | undefined>,
@@ -360,7 +459,7 @@ export async function ingestCheckToXtrace(
     headers: xtraceHeaders(env),
     body: JSON.stringify({
       wait: true,
-      user_id: xtraceUserId(env),
+      user_id: resolveXtraceUserId(actorUserId, env),
       conv_id: xtraceConvId(name),
       messages,
     }),

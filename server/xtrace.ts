@@ -56,8 +56,13 @@ function headers(): Record<string, string> {
   };
 }
 
-export function xtraceUserId(_topic: Topic): string {
-  return process.env.XTRACE_USER_ID ?? "1";
+export function xtraceUserId(actorUserId?: string, topic?: Topic): string {
+  return (
+    actorUserId?.trim() ||
+    topic?.user_id?.trim() ||
+    process.env.XTRACE_USER_ID ||
+    "1"
+  );
 }
 
 export function xtraceConvId(topic: Topic): string {
@@ -65,8 +70,11 @@ export function xtraceConvId(topic: Topic): string {
 }
 
 /** Load existing beliefs from the topic's Xtrace conversation (no LLM). */
-export async function fetchTopicMemoryContext(topic: Topic): Promise<string[]> {
-  const userId = xtraceUserId(topic);
+export async function fetchTopicMemoryContext(
+  topic: Topic,
+  actorUserId?: string,
+): Promise<string[]> {
+  const userId = xtraceUserId(actorUserId, topic);
   const convId = xtraceConvId(topic);
   const lines: string[] = [];
   let cursor: string | null = null;
@@ -212,8 +220,9 @@ async function pollJob(jobId: string): Promise<IngestJob> {
 export async function ingestResearchToXtrace(
   topic: Topic,
   result: ResearchPayload,
+  actorUserId?: string,
 ): Promise<string | undefined> {
-  const userId = xtraceUserId(topic);
+  const userId = xtraceUserId(actorUserId, topic);
   const convId = xtraceConvId(topic);
   const messages = buildXtraceMessages(topic, result);
 
@@ -268,11 +277,12 @@ export async function ingestCheckToXtrace(
   topic: Topic,
   updateSummary: string,
   claims: Array<{ text?: string }>,
+  actorUserId?: string,
 ): Promise<string | undefined> {
   const messages = buildXtraceCheckMessages(topic, updateSummary, claims);
   if (messages.length === 0) return undefined;
 
-  const userId = xtraceUserId(topic);
+  const userId = xtraceUserId(actorUserId, topic);
   const convId = xtraceConvId(topic);
 
   console.log(

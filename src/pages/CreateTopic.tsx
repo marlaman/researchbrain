@@ -71,6 +71,7 @@ export function CreateTopic() {
         job_id: job.id,
         topic_id: topic.id,
         topic_name: topicName,
+        user_id: session.user.id,
       }).then(({ error: triggerErr }) => {
         if (triggerErr) {
           console.error("initial research:", triggerErr);

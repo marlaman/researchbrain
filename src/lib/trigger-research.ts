@@ -4,6 +4,8 @@ export type TriggerResearchInput = {
   job_id: string;
   topic_id: string;
   topic_name: string;
+  /** Logged-in user performing this action (sent to Xtrace as user_id). */
+  user_id: string;
 };
 
 /** Dev: Vite → local Rocket Ride. Prod: Butterbase cloud function. */

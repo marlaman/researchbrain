@@ -1,4 +1,4 @@
-import { runTopicResearch, type ResearchResult } from "./_shared.ts";
+import { ingestResearchToXtrace, runTopicResearch, type ResearchResult } from "./_shared.ts";
 
 type FunctionContext = {
   env: Record<string, string | undefined>;
@@ -10,7 +10,7 @@ type JobRow = {
   id: string;
   topic_id: string;
   status: string;
-  payload: { topic_name?: string } | null;
+  payload: { topic_name?: string; user_id?: string } | null;
 };
 
 async function markJobFailed(
@@ -34,6 +34,7 @@ async function saveResearch(
   topicId: string,
   topicName: string,
   result: ResearchResult,
+  xtraceMemoryId?: string,
 ): Promise<void> {
   const sources = result.sources ?? [];
   for (const src of sources) {
@@ -56,21 +57,53 @@ async function saveResearch(
     [jobId, summary.slice(0, 1000)],
   );
   await ctx.db.query(
-    `UPDATE topics SET status = 'ready', last_checked_at = now() WHERE id = $1`,
-    [topicId],
+    `UPDATE topics
+     SET status = 'ready', last_checked_at = now()${xtraceMemoryId ? ", xtrace_memory_id = $2" : ""}
+     WHERE id = $1`,
+    xtraceMemoryId ? [topicId, xtraceMemoryId] : [topicId],
   );
+}
+
+function resolveActorUserId(
+  bodyUserId: string | undefined,
+  job: JobRow,
+): string {
+  const actor =
+    bodyUserId?.trim() ||
+    (typeof job.payload?.user_id === "string" ? job.payload.user_id.trim() : "");
+  if (!actor) {
+    throw new Error("user_id is required (logged-in user performing the action)");
+  }
+  return actor;
 }
 
 async function processJob(
   ctx: FunctionContext,
   job: JobRow,
   topicName: string,
+  actorUserId: string,
 ): Promise<void> {
   await ctx.db.query(`UPDATE jobs SET status = 'running' WHERE id = $1`, [job.id]);
 
   try {
     const result = await runTopicResearch(topicName, ctx.env);
-    await saveResearch(ctx, job.id, job.topic_id, topicName, result);
+    let xtraceMemoryId: string | undefined;
+    if (ctx.env.XTRACE_API_KEY && ctx.env.XTRACE_ORG_ID) {
+      try {
+        xtraceMemoryId = await ingestResearchToXtrace(
+          topicName,
+          actorUserId,
+          result,
+          ctx.env,
+        );
+      } catch (err) {
+        console.error(
+          "xtrace ingest failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+    await saveResearch(ctx, job.id, job.topic_id, topicName, result, xtraceMemoryId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error(`run-initial-research failed for job ${job.id}`, message);
@@ -88,6 +121,7 @@ export default async function handler(
     const jobId = (body as { job_id?: string }).job_id?.trim();
     const topicId = (body as { topic_id?: string }).topic_id?.trim();
     const topicName = (body as { topic_name?: string }).topic_name?.trim();
+    const bodyUserId = (body as { user_id?: string }).user_id?.trim();
 
     let job: JobRow | null = null;
 
@@ -128,7 +162,8 @@ export default async function handler(
     const resolvedTopicName =
       topicName ?? job.payload?.topic_name ?? "Untitled topic";
 
-    await processJob(ctx, job, resolvedTopicName);
+    const actorUserId = resolveActorUserId(bodyUserId, job);
+    await processJob(ctx, job, resolvedTopicName, actorUserId);
 
     return new Response(
       JSON.stringify({

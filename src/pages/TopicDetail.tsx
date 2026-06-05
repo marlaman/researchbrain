@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { db } from "../lib/butterbase";
+import { useAuth } from "../context/AuthContext";
 import { triggerCheckResearch, triggerInitialResearch } from "../lib/trigger-research";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Topic, Job, Source } from "../lib/types";
@@ -18,6 +19,8 @@ function fmt(iso: string | null) {
 export function TopicDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { session } = useAuth();
+  const actorUserId = session?.user?.id;
 
   const [topic, setTopic] = useState<Topic | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -77,7 +80,7 @@ export function TopicDetail() {
   useEffect(() => {
     if (!id || !topic) return;
     const queued = jobs.find((j) => j.type === "initial_research" && j.status === "queued");
-    if (!queued || wasTriggered(queued.id) || triggering) return;
+    if (!queued || wasTriggered(queued.id) || triggering || !actorUserId) return;
 
     markTriggered(queued.id, "research");
     setTriggering(true);
@@ -92,6 +95,7 @@ export function TopicDetail() {
       job_id: queued.id,
       topic_id: topic.id,
       topic_name: topic.name,
+      user_id: actorUserId,
     }).then(({ error: triggerErr }) => {
       setTriggering(false);
       if (triggerErr) {
@@ -103,12 +107,12 @@ export function TopicDetail() {
         void loadAll(id, false);
       }
     });
-  }, [id, topic?.id, topic?.name, jobs]);
+  }, [id, topic?.id, topic?.name, jobs, actorUserId]);
 
   useEffect(() => {
     if (!id || !topic) return;
     const queued = jobs.find((j) => j.type === "check" && j.status === "queued");
-    if (!queued || wasTriggered(queued.id, "check") || checkTriggering) return;
+    if (!queued || wasTriggered(queued.id, "check") || checkTriggering || !actorUserId) return;
 
     markTriggered(queued.id, "check");
     setCheckTriggering(true);
@@ -123,6 +127,7 @@ export function TopicDetail() {
       job_id: queued.id,
       topic_id: topic.id,
       topic_name: topic.name,
+      user_id: actorUserId,
     }).then(({ error: triggerErr }) => {
       setCheckTriggering(false);
       if (triggerErr) {
@@ -133,7 +138,7 @@ export function TopicDetail() {
         void loadAll(id, false);
       }
     });
-  }, [id, topic?.id, topic?.name, jobs]);
+  }, [id, topic?.id, topic?.name, jobs, actorUserId]);
 
   async function loadAll(topicId: string, showSpinner: boolean) {
     if (showSpinner) setLoading(true);
@@ -210,7 +215,7 @@ export function TopicDetail() {
   }
 
   async function checkLatestInfo() {
-    if (!topic || topic.status !== "ready" || jobBusy || checkSubmitting) return;
+    if (!topic || topic.status !== "ready" || jobBusy || checkSubmitting || !actorUserId) return;
     setCheckSubmitting(true);
     setCheckError(null);
     setCheckStep(null);
@@ -250,6 +255,7 @@ export function TopicDetail() {
       job_id: job.id,
       topic_id: topic.id,
       topic_name: topic.name,
+      user_id: actorUserId,
     });
 
     setCheckSubmitting(false);

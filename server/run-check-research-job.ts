@@ -135,6 +135,7 @@ export async function runCheckResearchJob(input: {
   job_id: string;
   topic_id?: string;
   topic_name?: string;
+  user_id?: string;
 }): Promise<
   | { ok: true; novel_sources: number; pushed_xtrace: boolean }
   | { ok: false; error: string }
@@ -183,7 +184,7 @@ export async function runCheckResearchJob(input: {
 
   let xtraceMemory: string[] = [];
   try {
-    xtraceMemory = await fetchTopicMemoryContext(topic);
+    xtraceMemory = await fetchTopicMemoryContext(topic, input.user_id);
     console.log(`[check] xtrace context: ${xtraceMemory.length} belief(s)`);
   } catch (err) {
     console.warn(
@@ -253,6 +254,7 @@ export async function runCheckResearchJob(input: {
         topic,
         summary,
         result.new_claims ?? [],
+        input.user_id,
       );
       if (memoryId) {
         console.log("[xtrace] check ingested:", memoryId);

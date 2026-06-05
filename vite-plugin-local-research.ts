@@ -53,6 +53,7 @@ export function localResearchPlugin(): Plugin {
             job_id?: string;
             topic_id?: string;
             topic_name?: string;
+            user_id?: string;
           };
 
           if (!body.job_id) {
@@ -64,6 +65,7 @@ export function localResearchPlugin(): Plugin {
             job_id: body.job_id,
             topic_id: body.topic_id,
             topic_name: body.topic_name,
+            user_id: body.user_id,
           };
 
           if (isInitial) {

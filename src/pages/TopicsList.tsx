@@ -13,7 +13,7 @@ export function TopicsList() {
   const [toggling, setToggling] = useState<string | null>(null);
 
   useEffect(() => {
-    if (session) loadTopics(session.user.id);
+    if (session?.user) loadTopics(session.user.id);
   }, [session]);
 
   async function loadTopics(userId: string) {

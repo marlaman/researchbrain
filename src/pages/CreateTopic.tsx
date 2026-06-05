@@ -14,7 +14,7 @@ export function CreateTopic() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !session) return;
+    if (!name.trim() || !session?.user) return;
     setSubmitting(true);
     setError(null);
 

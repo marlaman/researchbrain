@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
-import { runInitialResearch } from "./bundle-function.mjs";
+import { runCheckResearch, runInitialResearch } from "./bundle-function.mjs";
 
 function loadEnv(filePath) {
   const env = {};
@@ -80,9 +80,13 @@ if (!appId || !apiKey) {
   process.exit(1);
 }
 
-const rocketEnv = {
+const functionEnv = {
   ROCKETRIDE_OPENAI_KEY: env.ROCKETRIDE_OPENAI_KEY ?? "",
   ROCKETRIDE_EXA_KEY: env.ROCKETRIDE_EXA_KEY ?? "",
+  XTRACE_API_KEY: env.XTRACE_API_KEY ?? "",
+  XTRACE_ORG_ID: env.XTRACE_ORG_ID ?? "",
+  XTRACE_API_URL: env.XTRACE_API_URL ?? "",
+  XTRACE_USER_ID: env.XTRACE_USER_ID ?? "",
 };
 
 await deployFunction(appId, apiKey, "run-initial-research", runInitialResearch, {
@@ -90,8 +94,18 @@ await deployFunction(appId, apiKey, "run-initial-research", runInitialResearch, 
   config: { method: "POST", auth: "none" },
 }, {
   description: "Process initial_research jobs from the UI",
-  envVars: rocketEnv,
+  envVars: functionEnv,
+});
+
+await deployFunction(appId, apiKey, "run-check-research", runCheckResearch, {
+  type: "http",
+  config: { method: "POST", auth: "none" },
+}, {
+  description: "Process check jobs (latest info) from the UI",
+  envVars: functionEnv,
 });
 
 console.log("Deployed run-initial-research");
 console.log(`POST https://api.butterbase.ai/v1/${appId}/fn/run-initial-research`);
+console.log("Deployed run-check-research");
+console.log(`POST https://api.butterbase.ai/v1/${appId}/fn/run-check-research`);

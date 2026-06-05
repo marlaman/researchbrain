@@ -12,7 +12,9 @@ const sharedBody = shared.replace(/^export /gm, "");
 
 function bundle(entryName, outName) {
   const entry = fs.readFileSync(path.join(fnDir, entryName), "utf8");
-  const entryBody = entry.replace(/^import .*_shared\.ts.*\n/m, "");
+  const entryBody = entry
+    .replace(/^import\s+\{[\s\S]*?\}\s+from\s+["'].*_shared\.ts["'];?\s*\n/m, "")
+    .replace(/^import .*_shared\.ts.*\n/m, "");
   const out = `${sharedBody}\n${entryBody}`;
   const outPath = path.join(deployDir, outName);
   fs.writeFileSync(outPath, out);
@@ -22,4 +24,9 @@ function bundle(entryName, outName) {
 export const runInitialResearch = bundle(
   "run-initial-research.ts",
   "run-initial-research.bundle.ts",
+);
+
+export const runCheckResearch = bundle(
+  "run-check-research.ts",
+  "run-check-research.bundle.ts",
 );

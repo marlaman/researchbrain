@@ -57,7 +57,7 @@ export async function triggerInitialResearch(
   return { error: error ? (error as Error).message : undefined };
 }
 
-/** Dev: Vite → local Rocket Ride check pipe. Prod: cloud function (later). */
+/** Dev: Vite → local Rocket Ride check pipe. Prod: Butterbase cloud function. */
 export async function triggerCheckResearch(
   input: TriggerResearchInput,
 ): Promise<{ error?: string }> {
@@ -101,5 +101,9 @@ export async function triggerCheckResearch(
     }
   }
 
-  return { error: "Check research is only wired for local dev right now." };
+  const { error } = await db.functions.invoke("run-check-research", {
+    method: "POST",
+    body: input,
+  });
+  return { error: error ? (error as Error).message : undefined };
 }

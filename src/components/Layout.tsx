@@ -32,7 +32,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
 
         <div className="nav-user">
-          <span className="nav-email">{session?.user.email}</span>
+          <span className="nav-email">{session?.user?.email ?? ""}</span>
           <button className="btn btn-ghost btn-sm" onClick={handleSignOut}>
             Sign out
           </button>

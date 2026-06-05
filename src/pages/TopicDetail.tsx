@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { db } from "../lib/butterbase";
-import { triggerInitialResearch } from "../lib/trigger-research";
+import { triggerCheckResearch, triggerInitialResearch } from "../lib/trigger-research";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Topic, Job, Source } from "../lib/types";
 
@@ -28,25 +28,29 @@ export function TopicDetail() {
   const [researchStep, setResearchStep] = useState<string | null>(null);
   const [researchError, setResearchError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
+  const [checkTriggering, setCheckTriggering] = useState(false);
+  const [checkStep, setCheckStep] = useState<string | null>(null);
+  const [checkError, setCheckError] = useState<string | null>(null);
+  const [checkSubmitting, setCheckSubmitting] = useState(false);
   const invokedJobs = useRef<Set<string>>(new Set());
 
-  function triggerKey(jobId: string) {
-    return `research-triggered:${jobId}`;
+  function triggerKey(jobId: string, kind: "research" | "check" = "research") {
+    return `${kind}-triggered:${jobId}`;
   }
 
-  function markTriggered(jobId: string) {
-    invokedJobs.current.add(jobId);
+  function markTriggered(jobId: string, kind: "research" | "check" = "research") {
+    invokedJobs.current.add(`${kind}:${jobId}`);
     try {
-      sessionStorage.setItem(triggerKey(jobId), String(Date.now()));
+      sessionStorage.setItem(triggerKey(jobId, kind), String(Date.now()));
     } catch {
       // ignore
     }
   }
 
-  function wasTriggered(jobId: string) {
-    if (invokedJobs.current.has(jobId)) return true;
+  function wasTriggered(jobId: string, kind: "research" | "check" = "research") {
+    if (invokedJobs.current.has(`${kind}:${jobId}`)) return true;
     try {
-      return sessionStorage.getItem(triggerKey(jobId)) != null;
+      return sessionStorage.getItem(triggerKey(jobId, kind)) != null;
     } catch {
       return false;
     }
@@ -61,7 +65,9 @@ export function TopicDetail() {
     if (!id || !topic) return;
     const active =
       topic.status === "building" ||
-      jobs.some((j) => j.status === "queued" || j.status === "running");
+      jobs.some((j) => j.status === "queued" || j.status === "running") ||
+      checkTriggering ||
+      triggering;
     if (!active) return;
 
     const timer = setInterval(() => loadAll(id, false), 3000);
@@ -73,7 +79,7 @@ export function TopicDetail() {
     const queued = jobs.find((j) => j.type === "initial_research" && j.status === "queued");
     if (!queued || wasTriggered(queued.id) || triggering) return;
 
-    markTriggered(queued.id);
+    markTriggered(queued.id, "research");
     setTriggering(true);
     setResearchError(null);
     setResearchStep(
@@ -94,6 +100,36 @@ export function TopicDetail() {
         // Do not retry automatically — user clicks Retry research
       } else {
         setResearchStep("Pipeline finished — saving sources…");
+        void loadAll(id, false);
+      }
+    });
+  }, [id, topic?.id, topic?.name, jobs]);
+
+  useEffect(() => {
+    if (!id || !topic) return;
+    const queued = jobs.find((j) => j.type === "check" && j.status === "queued");
+    if (!queued || wasTriggered(queued.id, "check") || checkTriggering) return;
+
+    markTriggered(queued.id, "check");
+    setCheckTriggering(true);
+    setCheckError(null);
+    setCheckStep(
+      import.meta.env.DEV
+        ? "Calling local Rocket Ride (topic-research-check.pipe)…"
+        : "Checking for updates…",
+    );
+
+    void triggerCheckResearch({
+      job_id: queued.id,
+      topic_id: topic.id,
+      topic_name: topic.name,
+    }).then(({ error: triggerErr }) => {
+      setCheckTriggering(false);
+      if (triggerErr) {
+        setCheckError(triggerErr);
+        setCheckStep(null);
+      } else {
+        setCheckStep("Check finished — saving results…");
         void loadAll(id, false);
       }
     });
@@ -121,7 +157,13 @@ export function TopicDetail() {
   }
 
   const initialJob = jobs.find((j) => j.type === "initial_research");
+  const checkJob = jobs.find(
+    (j) => j.type === "check" && (j.status === "queued" || j.status === "running" || j.status === "failed"),
+  );
   const jobStatus = initialJob?.status;
+  const checkJobStatus = checkJob?.status;
+  const jobBusy = jobs.some((j) => j.status === "queued" || j.status === "running");
+
   const isActive =
     topic?.status === "building" ||
     topic?.status === "error" ||
@@ -130,6 +172,12 @@ export function TopicDetail() {
     jobStatus === "failed" ||
     triggering ||
     !!researchError;
+
+  const isCheckActive =
+    checkTriggering ||
+    checkJobStatus === "queued" ||
+    checkJobStatus === "running" ||
+    !!checkError;
 
   function statusMessage(): string {
     if (researchError) return researchError;
@@ -144,6 +192,76 @@ export function TopicDetail() {
       return initialJob?.result_summary ?? "Research failed.";
     }
     return "Research in progress…";
+  }
+
+  function checkStatusMessage(): string {
+    if (checkError) return checkError;
+    if (checkTriggering || checkStep) return checkStep ?? "Starting check…";
+    if (checkJobStatus === "queued") return "Check queued — waiting to start…";
+    if (checkJobStatus === "running") {
+      return import.meta.env.DEV
+        ? "Rocket Ride check running (topic-research-check.pipe). Usually 1–3 minutes."
+        : "Checking for new developments…";
+    }
+    if (checkJobStatus === "failed") {
+      return checkJob?.result_summary ?? "Check failed.";
+    }
+    return "Checking for updates…";
+  }
+
+  async function checkLatestInfo() {
+    if (!topic || topic.status !== "ready" || jobBusy || checkSubmitting) return;
+    setCheckSubmitting(true);
+    setCheckError(null);
+    setCheckStep(null);
+
+    const { data: jobData, error: jobErr } = await db
+      .from<Job>("jobs")
+      .insert({
+        topic_id: topic.id,
+        type: "check",
+        status: "queued",
+        payload: { topic_name: topic.name },
+      })
+      .select("*");
+
+    if (jobErr) {
+      setCheckError((jobErr as Error).message);
+      setCheckSubmitting(false);
+      return;
+    }
+
+    const job = (Array.isArray(jobData) ? jobData[0] : jobData) as Job | undefined;
+    if (!job?.id) {
+      setCheckError("Check job was created but no id was returned.");
+      setCheckSubmitting(false);
+      return;
+    }
+
+    markTriggered(job.id, "check");
+    setCheckTriggering(true);
+    setCheckStep(
+      import.meta.env.DEV
+        ? "Calling local Rocket Ride (topic-research-check.pipe)…"
+        : "Checking for updates…",
+    );
+
+    const { error: triggerErr } = await triggerCheckResearch({
+      job_id: job.id,
+      topic_id: topic.id,
+      topic_name: topic.name,
+    });
+
+    setCheckSubmitting(false);
+    setCheckTriggering(false);
+
+    if (triggerErr) {
+      setCheckError(triggerErr);
+      setCheckStep(null);
+    } else {
+      setCheckStep(null);
+      if (id) await loadAll(id, false);
+    }
   }
 
   async function toggleSubscription() {
@@ -185,6 +303,38 @@ export function TopicDetail() {
 
       {error && <div className="error-banner">{error}</div>}
 
+      {isCheckActive && (
+        <div
+          className="card"
+          style={{
+            marginBottom: "1rem",
+            padding: "1rem 1.25rem",
+            borderColor: checkError || checkJobStatus === "failed" ? "var(--danger, #c44)" : undefined,
+          }}
+        >
+          <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: ".5rem" }}>
+            {(checkTriggering || checkJobStatus === "running") && !checkError && (
+              <span className="spinner" style={{ width: 16, height: 16, margin: 0 }} />
+            )}
+            {checkError || checkJobStatus === "failed" ? "Check failed" : "Checking for updates"}
+          </div>
+          <p
+            style={{
+              margin: ".5rem 0 0",
+              fontSize: ".9rem",
+              color: checkError || checkJobStatus === "failed" ? "var(--danger, #c44)" : "var(--text-muted)",
+            }}
+          >
+            {checkStatusMessage()}
+          </p>
+          {import.meta.env.DEV && (
+            <p style={{ margin: ".5rem 0 0", fontSize: ".8rem", color: "var(--text-muted)" }}>
+              Run <code>topic-research-check.pipe</code> in Cursor (▶) before checking.
+            </p>
+          )}
+        </div>
+      )}
+
       {isActive && (
         <div
           className="card"
@@ -210,8 +360,9 @@ export function TopicDetail() {
               </p>
               <ol style={{ margin: ".25rem 0 0", paddingLeft: "1.25rem" }}>
                 <li>
-                  Open <code>topic-research.pipe</code> → Rocket Ride → <strong>Run (▶)</strong> until
-                  &quot;chat is now available&quot;
+                  Open <code>topic-research.pipe</code> (not the check pipe) → Rocket Ride → confirm{" "}
+                  <strong>OpenAI billing/quota</strong> → <strong>Run (▶)</strong> until &quot;chat is
+                  now available&quot;
                 </li>
                 <li>
                   UI at <strong>http://localhost:5173</strong> (<code>npm run dev</code>)
@@ -231,11 +382,11 @@ export function TopicDetail() {
                   onClick={() => {
                     if (!initialJob || !topic) return;
                     try {
-                      sessionStorage.removeItem(triggerKey(initialJob.id));
+                      sessionStorage.removeItem(triggerKey(initialJob.id, "research"));
                     } catch {
                       // ignore
                     }
-                    invokedJobs.current.delete(initialJob.id);
+                    invokedJobs.current.delete(`research:${initialJob.id}`);
                     setResearchError(null);
                     void db
                       .from("jobs")
@@ -280,6 +431,16 @@ export function TopicDetail() {
                 <> · Checked {fmt(topic.last_checked_at)}</>
               )}
             </span>
+            {topic.status === "ready" && (
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                onClick={() => void checkLatestInfo()}
+                disabled={jobBusy || checkSubmitting || checkTriggering}
+              >
+                {checkSubmitting || checkTriggering ? "Checking…" : "Check latest info"}
+              </button>
+            )}
             <button
               className={`btn btn-sm ${topic.is_subscribed ? "btn-subscribe" : "btn-unsubscribe"}`}
               onClick={toggleSubscription}
@@ -318,7 +479,11 @@ export function TopicDetail() {
                       <em style={{ color: "var(--text-muted)" }}>Waiting to start…</em>
                     )}
                     {job.status === "running" && (
-                      <em style={{ color: "var(--text-muted)" }}>Rocket Ride pipeline running…</em>
+                      <em style={{ color: "var(--text-muted)" }}>
+                        {job.type === "check"
+                          ? "Rocket Ride check pipeline running…"
+                          : "Rocket Ride pipeline running…"}
+                      </em>
                     )}
                     {job.status === "failed" && (
                       <span style={{ color: "var(--danger, #c44)" }}>

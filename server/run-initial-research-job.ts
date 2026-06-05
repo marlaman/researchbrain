@@ -6,13 +6,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { db } from "./db.js";
 import type { Job, Topic } from "../src/lib/types.js";
+import { ingestResearchToXtrace } from "./xtrace.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const PYTHON = process.env.PYTHON ?? "python3";
 const ROCKETRIDE_SCRIPT = path.join(ROOT, "scripts", "rocketride_run.py");
-const ROCKETRIDE_URI = process.env.ROCKETRIDE_URI ?? "http://127.0.0.1:5565";
-
 export type ResearchSource = {
   title?: string;
   url?: string;
@@ -20,14 +19,43 @@ export type ResearchSource = {
 };
 
 export type ResearchResult = {
+  topic?: string;
   summary?: string;
   sources?: ResearchSource[];
+  entities?: Array<{ id?: string; name?: string; type?: string }>;
+  relations?: Array<{ from?: string; to?: string; label?: string }>;
+  claims?: Array<{ text?: string; source_ids?: string[] }>;
+  open_questions?: string[];
   error?: string;
 };
 
-/** Best-effort probe — Rocket Ride speaks WebSocket, not HTTP, so a bare fetch often lies. */
+async function discoverRocketRideUri(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const child = spawn(PYTHON, [
+      "-c",
+      "from rocketride_discover import discover_engine_uris; u=discover_engine_uris(); print(u[0] if u else '')",
+    ], {
+      cwd: path.join(ROOT, "scripts"),
+      env: process.env,
+    });
+    let stdout = "";
+    child.stdout.on("data", (c) => {
+      stdout += String(c);
+    });
+    child.on("close", () => {
+      const uri = stdout.trim();
+      resolve(uri || null);
+    });
+    child.on("error", () => resolve(null));
+  });
+}
+
+/** Best-effort probe — port changes each Cursor session; auto-discover if env is stale. */
 export async function assertRocketRideReachable(): Promise<void> {
-  const url = new URL(ROCKETRIDE_URI);
+  const envUri = process.env.ROCKETRIDE_URI;
+  const discovered = await discoverRocketRideUri();
+  const uri = envUri ?? discovered ?? "http://127.0.0.1:5565";
+  const url = new URL(uri);
   const port = Number(url.port || 5565);
   const host = url.hostname || "127.0.0.1";
 
@@ -48,9 +76,15 @@ export async function assertRocketRideReachable(): Promise<void> {
 
   if (!reachable) {
     throw new Error(
-      `Cannot reach Rocket Ride engine at ${host}:${port}. ` +
-        `Copy Local URL + Public Authorization Key from Rocket Ride → Endpoint Configuration into .env.local ` +
-        `(ROCKETRIDE_URI + ROCKETRIDE_APIKEY). Default port 5565 is often wrong — yours may differ.`,
+      `Cannot reach Rocket Ride at ${host}:${port}. ` +
+        `Open topic-research.pipe in Cursor and click Run (▶) until chat is available.`,
+    );
+  }
+
+  if (envUri && discovered && envUri !== discovered) {
+    console.warn(
+      `[research] ROCKETRIDE_URI=${envUri} is stale; engine is at ${discovered}. ` +
+        `Remove ROCKETRIDE_URI from .env.local to auto-discover.`,
     );
   }
 }
@@ -122,7 +156,13 @@ export async function runInitialResearchJob(input: {
     (job.payload?.topic_name as string | undefined) ??
     topic.name;
 
-  await db.from("jobs").update({ status: "running" }).eq("id", job.id);
+  const jobUpdate = await db.from("jobs").update({ status: "running" }).eq("id", job.id);
+  if (jobUpdate.error) {
+    const message = (jobUpdate.error as Error).message;
+    return { ok: false, error: message };
+  }
+
+  console.log("[research] rocket ride:", topicName);
 
   try {
     await assertRocketRideReachable();
@@ -162,6 +202,20 @@ export async function runInitialResearchJob(input: {
   }
 
   const sources = result.sources ?? [];
+  if (sources.length === 0) {
+    const message =
+      `Initial research returned no sources for "${topicName}". ` +
+      `Open topic-research.pipe in Cursor and click Run (▶) until chat is available, then retry. ` +
+      `(If you use Check latest info, keep topic-research-check.pipe running too — it is a separate pipeline.)`;
+    await db.from("jobs").update({
+      status: "failed",
+      result_summary: message.slice(0, 500),
+      finished_at: new Date().toISOString(),
+    }).eq("id", job.id);
+    await db.from("topics").update({ status: "error" }).eq("id", topic.id);
+    return { ok: false, error: message };
+  }
+
   for (const src of sources) {
     if (!src.url) continue;
     await db.from("sources").insert({
@@ -176,6 +230,20 @@ export async function runInitialResearchJob(input: {
   const summary =
     result.summary ?? `Found ${sources.length} source(s) for "${topicName}".`;
 
+  // Xtrace runs only after Rocket Ride finishes and sources are saved.
+  let xtraceMemoryId: string | undefined;
+  try {
+    xtraceMemoryId = await ingestResearchToXtrace(topic, result);
+    if (xtraceMemoryId) {
+      console.log("[xtrace] ingested:", xtraceMemoryId);
+    }
+  } catch (err) {
+    console.error(
+      "[xtrace] failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   await db.from("jobs").update({
     status: "done",
     result_summary: summary.slice(0, 1000),
@@ -185,7 +253,9 @@ export async function runInitialResearchJob(input: {
   await db.from("topics").update({
     status: "ready",
     last_checked_at: new Date().toISOString(),
+    ...(xtraceMemoryId ? { xtrace_memory_id: xtraceMemoryId } : {}),
   }).eq("id", topic.id);
 
+  console.log("[research] done:", job.id, sources.length, "sources");
   return { ok: true, sources: sources.length };
 }

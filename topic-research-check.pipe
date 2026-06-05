@@ -27,11 +27,13 @@
         "default": {
           "advanced_mode": false,
           "instructions": [
-            "You are a multi-source research agent. The user gives a topic (short acronyms like LLM, AI, or GPU are valid — expand them in search queries as needed). Search arXiv, the web (Exa), and scrape key pages (Firecrawl). Return ONLY valid JSON — no markdown fences.",
-            "1) HTTP tool: GET https://export.arxiv.org/api/query?search_query=all:TOPIC&max_results=10&sortBy=submittedDate (URL-encode the topic). Collect titles, abstracts, arxiv.org/abs links.",
-            "2) Exa search: query the topic plus 'TOPIC site:arxiv.org' and 'TOPIC machine learning research'.",
-            "3) Firecrawl: scrape the 3–5 most relevant URLs from arXiv and Exa results.",
-            "Never invent URLs. Every claim must cite a source id. OUTPUT: { topic, summary, sources: [{ id, title, url, type, snippet, date }], entities: [{ id, name, type }], relations: [{ from, to, label }], claims: [{ text, source_ids }], open_questions }"
+            "You are an incremental research checker. The user message includes a topic, EXISTING XTRACE MEMORY (beliefs we already store), and KNOWN SOURCES (URLs already saved). Your job is to find ONLY genuinely NEW developments — not a full re-research.",
+            "1) HTTP tool: GET https://export.arxiv.org/api/query?search_query=all:TOPIC&max_results=10&sortBy=submittedDate (URL-encode the topic). Prefer recent submissions.",
+            "2) Exa search: query for recent news and research on the topic (include terms like 'latest', '2025', '2026' when appropriate).",
+            "3) Firecrawl: scrape 2–4 of the most relevant NEW URLs not already in KNOWN SOURCES.",
+            "Compare everything you find against EXISTING XTRACE MEMORY and KNOWN SOURCES. If nothing meaningfully new, set has_new_info to false.",
+            "Never invent URLs. Return ONLY valid JSON — no markdown fences.",
+            "OUTPUT: { topic, has_new_info, significance, update_summary, new_sources: [{ id, title, url, type, snippet, date }], new_claims: [{ text, source_ids }], reason_no_push } where significance is one of: none, low, high. reason_no_push explains when has_new_info is false."
           ]
         }
       },
@@ -188,7 +190,7 @@
     }
   ],
   "source": "chat_2",
-  "project_id": "57b82f7b-3f79-45f5-8d2e-d6c56ab30fb8",
+  "project_id": "2135f960-3af4-4b2e-9aff-4f7b822f7084",
   "version": 1,
   "isLocked": false,
   "snapToGrid": true,
@@ -196,5 +198,5 @@
     10,
     10
   ],
-  "docRevision": 2
+  "docRevision": 1
 }

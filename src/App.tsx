@@ -7,9 +7,12 @@ import { SignupPage } from "./pages/SignupPage";
 import { TopicsList } from "./pages/TopicsList";
 import { CreateTopic } from "./pages/CreateTopic";
 import { TopicDetail } from "./pages/TopicDetail";
+import { ParticleCanvas } from "./components/ParticleCanvas";
 
 export function App() {
   return (
+    <>
+      <ParticleCanvas />
     <BrowserRouter>
       <AuthProvider>
         <Routes>
@@ -35,5 +38,6 @@ export function App() {
         </Routes>
       </AuthProvider>
     </BrowserRouter>
+    </>
   );
 }

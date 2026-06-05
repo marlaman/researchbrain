@@ -35,6 +35,7 @@ async function saveResearch(
   topicName: string,
   result: ResearchResult,
   xtraceMemoryId?: string,
+  xtraceNote = "",
 ): Promise<void> {
   const sources = result.sources ?? [];
   for (const src of sources) {
@@ -46,15 +47,16 @@ async function saveResearch(
     );
   }
 
-  const summary =
-    result.summary ??
-    `Found ${sources.length} source(s) for "${topicName}".`;
+  const summary = (
+    (result.summary ?? `Found ${sources.length} source(s) for "${topicName}".`) +
+    xtraceNote
+  ).slice(0, 1000);
 
   await ctx.db.query(
     `UPDATE jobs
      SET status = 'done', result_summary = $2, finished_at = now()
      WHERE id = $1`,
-    [jobId, summary.slice(0, 1000)],
+    [jobId, summary],
   );
   await ctx.db.query(
     `UPDATE topics
@@ -88,6 +90,7 @@ async function processJob(
   try {
     const result = await runTopicResearch(topicName, ctx.env);
     let xtraceMemoryId: string | undefined;
+    let xtraceNote = "";
     if (ctx.env.XTRACE_API_KEY && ctx.env.XTRACE_ORG_ID) {
       try {
         xtraceMemoryId = await ingestResearchToXtrace(
@@ -96,14 +99,26 @@ async function processJob(
           result,
           ctx.env,
         );
+        if (!xtraceMemoryId) {
+          xtraceNote = " Xtrace: ingest ok but 0 memories extracted.";
+        }
       } catch (err) {
-        console.error(
-          "xtrace ingest failed:",
-          err instanceof Error ? err.message : err,
-        );
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("xtrace ingest failed:", msg);
+        xtraceNote = ` Xtrace failed: ${msg.slice(0, 200)}`;
       }
+    } else {
+      xtraceNote = " Xtrace skipped: missing XTRACE_API_KEY or XTRACE_ORG_ID on function.";
     }
-    await saveResearch(ctx, job.id, job.topic_id, topicName, result, xtraceMemoryId);
+    await saveResearch(
+      ctx,
+      job.id,
+      job.topic_id,
+      topicName,
+      result,
+      xtraceMemoryId,
+      xtraceNote,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error(`run-initial-research failed for job ${job.id}`, message);

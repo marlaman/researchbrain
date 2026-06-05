@@ -245,7 +245,8 @@ export function buildCheckPrompt(
 }
 
 function xtraceBaseUrl(env: Record<string, string | undefined>): string {
-  return env.XTRACE_API_URL ?? "https://api.production.xtrace.ai";
+  const configured = env.XTRACE_API_URL?.trim();
+  return configured || "https://api.production.xtrace.ai";
 }
 
 function xtraceHeaders(env: Record<string, string | undefined>): Record<string, string> {

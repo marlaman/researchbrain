@@ -22,7 +22,7 @@ export type ResearchPayload = {
 type XtraceMessage = { role: "user"; content: string };
 
 const BASE_URL =
-  process.env.XTRACE_API_URL ?? "https://api.production.xtrace.ai";
+  process.env.XTRACE_API_URL?.trim() || "https://api.production.xtrace.ai";
 const API_KEY = process.env.XTRACE_API_KEY;
 const ORG_ID = process.env.XTRACE_ORG_ID;
 const POLL_MS = 1000;

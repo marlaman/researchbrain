@@ -49,7 +49,7 @@ export function CreateTopic() {
         topic_id: topic.id,
         type: "initial_research",
         status: "queued",
-        payload: { topic_name: topicName },
+        payload: { topic_name: topicName, user_id: session.user.id },
       })
       .select("*");
 

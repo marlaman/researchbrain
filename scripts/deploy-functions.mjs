@@ -80,14 +80,15 @@ if (!appId || !apiKey) {
   process.exit(1);
 }
 
-const functionEnv = {
-  ROCKETRIDE_OPENAI_KEY: env.ROCKETRIDE_OPENAI_KEY ?? "",
-  ROCKETRIDE_EXA_KEY: env.ROCKETRIDE_EXA_KEY ?? "",
-  XTRACE_API_KEY: env.XTRACE_API_KEY ?? "",
-  XTRACE_ORG_ID: env.XTRACE_ORG_ID ?? "",
-  XTRACE_API_URL: env.XTRACE_API_URL ?? "",
-  XTRACE_USER_ID: env.XTRACE_USER_ID ?? "",
-};
+const functionEnv = Object.fromEntries(
+  Object.entries({
+    ROCKETRIDE_OPENAI_KEY: env.ROCKETRIDE_OPENAI_KEY,
+    ROCKETRIDE_EXA_KEY: env.ROCKETRIDE_EXA_KEY,
+    XTRACE_API_KEY: env.XTRACE_API_KEY,
+    XTRACE_ORG_ID: env.XTRACE_ORG_ID,
+    XTRACE_API_URL: env.XTRACE_API_URL,
+  }).filter(([, value]) => value != null && String(value).trim() !== ""),
+);
 
 await deployFunction(appId, apiKey, "run-initial-research", runInitialResearch, {
   type: "http",

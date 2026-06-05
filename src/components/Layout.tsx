@@ -1,6 +1,16 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import type { ReactNode } from "react";
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout({ children }: { children: ReactNode }) {
+  const { session, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleSignOut() {
+    await signOut();
+    navigate("/login", { replace: true });
+  }
+
   return (
     <>
       <nav className="nav">
@@ -11,6 +21,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </svg>
           Research Brain
         </NavLink>
+
         <div className="nav-links">
           <NavLink to="/" end className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}>
             Topics
@@ -18,6 +29,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <NavLink to="/topics/new" className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}>
             + New Topic
           </NavLink>
+        </div>
+
+        <div className="nav-user">
+          <span className="nav-email">{session?.user.email}</span>
+          <button className="btn btn-ghost btn-sm" onClick={handleSignOut}>
+            Sign out
+          </button>
         </div>
       </nav>
       <main>{children}</main>

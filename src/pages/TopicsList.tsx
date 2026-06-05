@@ -1,25 +1,28 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { db } from "../lib/butterbase";
+import { useAuth } from "../context/AuthContext";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Topic } from "../lib/types";
 
 export function TopicsList() {
+  const { session } = useAuth();
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
 
   useEffect(() => {
-    loadTopics();
-  }, []);
+    if (session) loadTopics(session.user.id);
+  }, [session]);
 
-  async function loadTopics() {
+  async function loadTopics(userId: string) {
     setLoading(true);
     setError(null);
     const { data, error } = await db
       .from<Topic>("topics")
       .select("*")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false });
     if (error) {
       setError((error as Error).message);

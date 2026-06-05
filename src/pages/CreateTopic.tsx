@@ -1,31 +1,20 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { db } from "../lib/butterbase";
 import { triggerInitialResearch } from "../lib/trigger-research";
-import type { Topic, User } from "../lib/types";
+import { useAuth } from "../context/AuthContext";
+import type { Topic } from "../lib/types";
 
 export function CreateTopic() {
   const navigate = useNavigate();
+  const { session } = useAuth();
   const [name, setName] = useState("");
-  const [userId, setUserId] = useState("");
-  const [users, setUsers] = useState<User[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    db.from<User>("users")
-      .select("*")
-      .order("created_at", { ascending: true })
-      .then(({ data }) => {
-        const list = (data as User[]) ?? [];
-        setUsers(list);
-        if (list.length > 0) setUserId(list[0].id);
-      });
-  }, []);
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !userId) return;
+    if (!name.trim() || !session) return;
     setSubmitting(true);
     setError(null);
 
@@ -35,7 +24,7 @@ export function CreateTopic() {
       .from<Topic>("topics")
       .insert({
         name: topicName,
-        user_id: userId,
+        user_id: session.user.id,
         status: "building",
         is_subscribed: true,
       })
@@ -97,12 +86,6 @@ export function CreateTopic() {
     navigate(`/topics/${topic.id}`);
   }
 
-  function userLabel(u: User) {
-    if (u.slack_user_id) return `${u.slack_user_id} (Slack)`;
-    if (u.discord_user_id) return `${u.discord_user_id} (Discord)`;
-    return u.id.slice(0, 8) + "…";
-  }
-
   return (
     <div className="page">
       <Link to="/" className="page-back">
@@ -138,36 +121,11 @@ export function CreateTopic() {
             </p>
           </div>
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="user">
-              User
-            </label>
-            <select
-              id="user"
-              className="form-select"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              required
-            >
-              {users.length === 0 && (
-                <option value="" disabled>
-                  Loading users…
-                </option>
-              )}
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {userLabel(u)}
-                </option>
-              ))}
-            </select>
-            <p className="form-hint">Which user owns this topic?</p>
-          </div>
-
           <div className="form-actions">
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={submitting || !name.trim() || !userId}
+              disabled={submitting || !name.trim()}
             >
               {submitting ? "Creating…" : "Create Topic"}
             </button>

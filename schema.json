@@ -18,9 +18,15 @@
             "nullable": true,
             "unique": true
           },
+          "email": {
+            "type": "text",
+            "nullable": true,
+            "unique": true
+          },
           "notify_channel": {
             "type": "text",
-            "nullable": false
+            "nullable": false,
+            "default": "'slack'"
           },
           "created_at": {
             "type": "timestamptz",

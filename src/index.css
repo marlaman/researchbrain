@@ -431,3 +431,77 @@ body {
 
 /* ── Divider ─────────────────────────────────────── */
 .divider { height: 1px; background: var(--border); margin: 1.25rem 0; }
+
+/* ── Nav user ────────────────────────────────────── */
+.nav-user {
+  display: flex;
+  align-items: center;
+  gap: .625rem;
+  margin-left: auto;
+}
+.nav-email {
+  font-size: .8rem;
+  color: var(--text-muted);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Auth pages ──────────────────────────────────── */
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 1.5rem;
+}
+.auth-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 2.25rem 2rem;
+  width: 100%;
+  max-width: 400px;
+}
+.auth-logo {
+  display: flex;
+  justify-content: center;
+  color: var(--primary);
+  margin-bottom: 1.125rem;
+}
+.auth-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 1.5rem;
+  color: var(--text);
+}
+.auth-subtitle {
+  font-size: .875rem;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+}
+.auth-submit {
+  width: 100%;
+  justify-content: center;
+  margin-top: .5rem;
+  padding: .65rem 1rem;
+  font-size: .9rem;
+}
+.auth-switch {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: .875rem;
+  color: var(--text-muted);
+}
+.auth-switch a {
+  color: var(--primary);
+  font-weight: 500;
+  text-decoration: none;
+}
+.auth-switch a:hover { text-decoration: underline; }
